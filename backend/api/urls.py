@@ -13,4 +13,7 @@ urlpatterns = [
 
     # GeoTIFF
     path('orthomap/', views.OrthomapView.as_view(), name='orthomap'),
+
+    path('orthomap/rgb/', views.OrthomapRGBView.as_view()),    
+    path('orthomap/thermal/', views.OrthomapThermalView.as_view()),
 ]
