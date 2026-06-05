@@ -63,7 +63,7 @@ DATABASES = {
         'NAME': 'gep_db',
         'USER': 'gep_user',
         'PASSWORD': 'gep_pass123',
-        'HOST': 'localhost',    
+        'HOST': 'db',    
         'PORT': '5432',
     }
 }
