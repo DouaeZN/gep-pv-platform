@@ -20,12 +20,16 @@ class SystemListView(APIView):
                 system=s
             ).order_by('-timestamp').first()
 
-            today = timezone.now().date()
-            daily_energy = sum(
-                ACProduction.objects.filter(
-                    system=s, timestamp__date=today
-                ).values_list('ac_energy_kwh', flat=True)
-            )
+            last_ac = ACProduction.objects.filter(system=s).order_by('-timestamp').first()
+            if last_ac:
+                last_day = last_ac.timestamp.date()
+                daily_energy = sum(
+                    ACProduction.objects.filter(
+                        system=s, timestamp__date=last_day
+                    ).values_list('ac_energy_kwh', flat=True)
+                )
+            else:
+                daily_energy = 0
 
             # Prendre le premier module et la liste des onduleurs
             module = Module.objects.filter(system=s).first()
@@ -70,17 +74,31 @@ class SystemDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        days = int(request.query_params.get('days', 7))
-        since = timezone.now() - timedelta(days=days)
+        days = request.query_params.get('days', '7')
 
-        dc_data = list(
-            DCProduction.objects.filter(
-                system=system, timestamp__gte=since
-            ).order_by('timestamp').values(
-                'timestamp', 'dc_power_kw', 'dc_voltage_v',
-                'dc_current_a', 'irradiance_wm2'
-            )
-        )
+        dc_qs = DCProduction.objects.filter(system=system).order_by('-timestamp')
+
+        if dc_qs.exists():
+            last_date = dc_qs.first().timestamp
+            since = last_date - timedelta(days=int(days))
+            dc_qs = dc_qs.filter(timestamp__gte=since).order_by('timestamp')
+
+        ac_qs = ACProduction.objects.filter(system=system).order_by('-timestamp')
+
+        if ac_qs.exists():
+            last_date = ac_qs.first().timestamp
+            since = last_date - timedelta(days=int(days))
+            ac_qs = ac_qs.filter(timestamp__gte=since).order_by('timestamp')
+
+        dc_data = list(dc_qs.values(
+            'timestamp', 'dc_power_kw', 'dc_voltage_v',
+            'dc_current_a', 'irradiance_wm2'
+        ))
+
+        ac_data = list(ac_qs.values(
+            'timestamp', 'ac_power_kw', 'ac_energy_kwh',
+            'ac_voltage_v', 'ac_frequency_hz', 'power_factor'
+        ))
 
         ac_data = list(
             ACProduction.objects.filter(
