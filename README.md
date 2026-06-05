@@ -122,6 +122,7 @@ gep-pv-platform/
 - **Géoréférencement WGS84** — Les coordonnées du GeoTIFF (projection UTM) sont converties en WGS84 via `rasterio.warp.transform_bounds` pour un positionnement correct sur Leaflet.
 - **ForeignKey au lieu de OneToOneField** — Les onduleurs sont en relation ManyToOne avec les systèmes (SYS-001 a 2 onduleurs, SYS-003 a 2 onduleurs).
 - **Données CSV réelles** — Les 5 fichiers CSV fournis avec l'exercice sont chargés via `python manage.py seed_data`. Si absents, des données simulées sont générées automatiquement sur 30 jours.
+- **Sélecteur de période relatif** — Les CSV fournis couvrent du 01/06/2024 au 07/06/2024. Le sélecteur de période est calculé relativement à la dernière date disponible en base, et non à la date actuelle, afin d'afficher toujours des données réelles.
 
 ## Critères d'évaluation couverts
 
