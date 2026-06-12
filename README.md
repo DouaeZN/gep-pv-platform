@@ -17,7 +17,7 @@ Plateforme web de monitoring de 4 systèmes photovoltaïques du Green Energy Par
 ### Prérequis
 
 - Docker Desktop installé et démarré
-- Fichier `plant_orthomap.tif` placé dans le dossier `data/`
+- Fichier `masque.tif` placé dans le dossier `data/`
 - Les fichiers CSV placés dans le dossier `data/` (optionnel — des données simulées sont générées automatiquement si absents)
 
 ### Démarrage en une commande

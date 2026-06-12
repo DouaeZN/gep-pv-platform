@@ -2,6 +2,7 @@ data/*.csv
 data/*.tif
 data/*.tiff
 data/*.geotiff
+data/*.geojson
 
 backend/venv/
 backend/env/

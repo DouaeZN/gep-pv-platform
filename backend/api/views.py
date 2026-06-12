@@ -1,12 +1,13 @@
 from django.utils import timezone
 from datetime import timedelta
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponse
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from .models import PVSystem, Module, Inverter, DCProduction, ACProduction
 import io
+from rio_tiler.io import Reader
 from PIL import Image as PILImage
 
 class SystemListView(APIView):
@@ -119,7 +120,7 @@ class SystemDetailView(APIView):
 
 class OrthomapView(APIView):
     def get(self, request):
-        tif_path = settings.DATA_DIR / 'plant_orthomap.tif'
+        tif_path = settings.DATA_DIR / 'masque.tif'
         if not tif_path.exists():
             return Response(
                 {'error': 'Fichier GeoTIFF non trouvé'},
@@ -139,7 +140,7 @@ def get_wgs84_bounds(src):
 
 class OrthomapRGBView(APIView):
     def get(self, request):
-        tif_path = settings.DATA_DIR / 'plant_orthomap.tif'
+        tif_path = settings.DATA_DIR / 'masque.tif'
         if not tif_path.exists():
             return Response({'error': 'GeoTIFF non trouvé'}, status=404)
         try:
@@ -185,7 +186,7 @@ class OrthomapRGBView(APIView):
 
 class OrthomapThermalView(APIView):
     def get(self, request):
-        tif_path = settings.DATA_DIR / 'plant_orthomap.tif'
+        tif_path = settings.DATA_DIR / 'masque.tif'
         if not tif_path.exists():
             return Response({'error': 'GeoTIFF non trouvé'}, status=404)
         try:
@@ -251,7 +252,7 @@ class OrthomapThermalView(APIView):
     """Génère la couche thermique simulée en PNG côté serveur."""
 
     def get(self, request):
-        tif_path = settings.DATA_DIR / 'plant_orthomap.tif'
+        tif_path = settings.DATA_DIR / 'masque.tif'
         if not tif_path.exists():
             return Response({'error': 'GeoTIFF non trouvé'}, status=404)
 
@@ -317,3 +318,85 @@ class OrthomapThermalView(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=500)
+        
+class TileView(APIView):
+    """Sert les tuiles XYZ depuis le COG — bonne résolution à chaque zoom."""
+
+    def get(self, request, z, x, y):
+        tif_path = str(settings.DATA_DIR / 'masque.tif')
+        try:
+            with Reader(tif_path) as cog:
+                img = cog.tile(x, y, z, indexes=[1, 2, 3])
+                content = img.render(img_format="PNG")
+            return HttpResponse(content, content_type='image/png')
+        except Exception:
+            # Tuile hors bounds — retourner transparent
+            from PIL import Image as PILImage
+            buf = io.BytesIO()
+            PILImage.new('RGBA', (256, 256), (0, 0, 0, 0)).save(buf, 'PNG')
+            return HttpResponse(buf.getvalue(), content_type='image/png')
+        
+class SystemsGeoJSONView(APIView):
+    """Sert le GeoJSON des systèmes converti en WGS84 avec données live."""
+
+    def get(self, request):
+        import json
+        from pyproj import Transformer
+
+        geojson_path = settings.DATA_DIR / 'systems.geojson'
+        if not geojson_path.exists():
+            return Response({'error': 'GeoJSON non trouvé'}, status=404)
+
+        with open(geojson_path) as f:
+            geojson = json.load(f)
+
+        # Transformer UTM 32629 → WGS84
+        transformer = Transformer.from_crs('EPSG:32629', 'EPSG:4326', always_xy=True)
+
+        def convert_coords(coords):
+            """Convertit récursivement toutes les coordonnées."""
+            if isinstance(coords[0], list):
+                return [convert_coords(c) for c in coords]
+            lng, lat = transformer.transform(coords[0], coords[1])
+            return [lng, lat]
+
+        # Enrichir chaque feature avec les données du système
+        for feature in geojson['features']:
+            system_id = feature['properties']['system']
+            try:
+                system = PVSystem.objects.get(system_id=system_id)
+                last_ac = ACProduction.objects.filter(
+                    system=system
+                ).order_by('-timestamp').first()
+
+                last_day = last_ac.timestamp.date() if last_ac else None
+                daily_energy = 0
+                if last_day:
+                    daily_energy = sum(
+                        ACProduction.objects.filter(
+                            system=system,
+                            timestamp__date=last_day
+                        ).values_list('ac_energy_kwh', flat=True)
+                    )
+
+                feature['properties'].update({
+                    'name': system.name,
+                    'capacity_kwc': system.capacity_kwc,
+                    'commissioning_date': str(system.commissioning_date),
+                    'orientation': system.orientation,
+                    'inclination': system.inclination,
+                    'last_ac_power_kw': last_ac.ac_power_kw if last_ac else 0,
+                    'daily_energy_kwh': round(daily_energy, 2),
+                    'last_timestamp': str(last_ac.timestamp) if last_ac else None,
+                })
+            except PVSystem.DoesNotExist:
+                pass
+
+            # Convertir les coordonnées
+            geom = feature['geometry']
+            geom['coordinates'] = convert_coords(geom['coordinates'])
+
+        # Supprimer le CRS (non standard GeoJSON RFC7946)
+        geojson.pop('crs', None)
+
+        return Response(geojson)

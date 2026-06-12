@@ -16,4 +16,7 @@ urlpatterns = [
 
     path('orthomap/rgb/', views.OrthomapRGBView.as_view()),    
     path('orthomap/thermal/', views.OrthomapThermalView.as_view()),
+
+    path('orthomap/tiles/<int:z>/<int:x>/<int:y>/', views.TileView.as_view()),  
+    path('orthomap/systems.geojson', views.SystemsGeoJSONView.as_view()), 
 ]
