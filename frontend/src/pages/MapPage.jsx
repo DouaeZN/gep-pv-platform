@@ -2,8 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import Navbar from '../components/Navbar';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faSpinner,
+  faCircleInfo,
+  faTemperatureHalf,
+} from '@fortawesome/free-solid-svg-icons';
 
-// Font Awesome via CDN (injecté une seule fois dans le <head>)
 if (!document.getElementById('fa-cdn')) {
   const link = document.createElement('link');
   link.id = 'fa-cdn';
@@ -27,12 +32,9 @@ export default function MapPage() {
   const [tifLoaded, setTifLoaded] = useState(false);
 
   useEffect(() => {
-    // Guard strict — ne jamais recréer si la carte existe déjà
     if (mapInstance.current) return;
     if (!mapRef.current) return;
 
-    // Nettoyer le container DOM au cas où Leaflet y aurait laissé des artefacts
-    // lors du double-mount de React StrictMode en développement
     mapRef.current.innerHTML = '';
 
     const map = L.map(mapRef.current, {
@@ -40,19 +42,21 @@ export default function MapPage() {
       zoom: GEP_ZOOM,
       minZoom: 10,
       maxZoom: 24,
+      zoomSnap: 0.5,
+      zoomDelta: 0.5,
+      wheelDebounceTime: 40,
+      wheelPxPerZoomLevel: 120,
     });
 
-    // Assigner IMMÉDIATEMENT avant toute opération async
     mapInstance.current = map;
 
-    // ── Fonds de carte ──
     const osm = L.tileLayer(
       'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
       { attribution: '© OpenStreetMap', maxZoom: 24, maxNativeZoom: 19 }
     );
     const satellite = L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      { attribution: '© Esri', maxZoom: 24, maxNativeZoom: 17 }
+      'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+      { attribution: '© Google', maxZoom: 24, maxNativeZoom: 21 }
     );
     const terrain = L.tileLayer(
       'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
@@ -60,8 +64,6 @@ export default function MapPage() {
     );
     osm.addTo(map);
 
-    // ── Orthomosaïque via tuiles COG ──
-    // Lire le token une seule fois ici et le passer partout
     const token = localStorage.getItem('access_token');
 
     const orthoTiles = L.tileLayer(
@@ -72,25 +74,42 @@ export default function MapPage() {
         maxZoom: 24,
         maxNativeZoom: 24,
         tileSize: 256,
+        keepBuffer: 2,
+        updateWhenIdle: false,
+        updateWhenZooming: false,
       }
     );
 
-    // Hack pour envoyer le JWT dans les headers des tuiles
     orthoTiles.createTile = function (coords, done) {
       const tile = document.createElement('img');
       tile.crossOrigin = 'anonymous';
       const url = this.getTileUrl(coords);
+      const controller = new AbortController();
+      tile._abortController = controller;
+
       fetch(url, {
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       })
-        .then((r) => r.blob())
+        .then((r) => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.blob();
+        })
         .then((blob) => {
           tile.src = URL.createObjectURL(blob);
           done(null, tile);
         })
-        .catch((e) => done(e, tile));
+        .catch((e) => {
+          if (e.name !== 'AbortError') done(e, tile);
+        });
+
       return tile;
     };
+
+    orthoTiles.on('tileunload', (e) => {
+      const ctrl = e.tile._abortController;
+      if (ctrl) ctrl.abort();
+    });
 
     orthoTiles.addTo(map);
 
@@ -104,8 +123,6 @@ export default function MapPage() {
 
     L.control.scale({ imperial: false }).addTo(map);
 
-    // Passer le token explicitement pour éviter une re-lecture asynchrone
-    // Passer le REF (pas la valeur) pour détecter le cleanup StrictMode après chaque await
     loadSystemsGeoJSON(mapInstance, token);
 
     return () => {
@@ -114,13 +131,11 @@ export default function MapPage() {
         mapInstance.current = null;
       }
     };
-  }, []); // tableau vide strict, aucune dépendance
+  }, []);
 
   async function loadSystemsGeoJSON(mapRef, token) {
     setStatus('Chargement des systèmes...');
 
-    // Vérifie que la carte n'a pas été détruite par le cleanup StrictMode
-    // On lit mapRef.current (le ref React) — null = carte détruite → abandon silencieux
     const mapAlive = () => mapRef.current !== null;
 
     try {
@@ -129,20 +144,16 @@ export default function MapPage() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      // La carte a peut-être été détruite pendant le fetch (StrictMode) → abandon silencieux
       if (!mapAlive()) return;
 
-      // Vérifier le statut HTTP avant de parser
       if (!res.ok) {
         throw new Error(`HTTP ${res.status} — ${res.statusText}`);
       }
 
       const geojson = await res.json();
 
-      // Re-vérifier après le second await
       if (!mapAlive()) return;
 
-      // Regrouper les features par system_id
       const systemsMap = {};
       for (const feature of geojson.features) {
         const sid = feature.properties.system;
@@ -155,7 +166,6 @@ export default function MapPage() {
         systemsMap[sid].geometries.push(feature.geometry);
       }
 
-      // Créer un featureGroup par système
       for (const sid of Object.keys(systemsMap)) {
         const { properties: p, geometries } = systemsMap[sid];
 
@@ -248,7 +258,6 @@ export default function MapPage() {
 
         systemGroup.bindPopup(popupContent, { maxWidth: 300 });
 
-        // Highlight au survol de n'importe quel polygone du groupe
         const highlight = () => {
           systemGroup.eachLayer((l) => {
             if (l.setStyle) l.setStyle({ fillOpacity: 0.45, weight: 3.5, color: '#00e5ff', dashArray: '' });
@@ -274,16 +283,13 @@ export default function MapPage() {
         systemGroup.addTo(mapRef.current);
       }
 
-      // Sortir du call stack courant pour éviter les re-renders parasites
       setTimeout(() => {
         setStatus('Carte chargée ✓');
         setTifLoaded(true);
       }, 0);
     } catch (err) {
-      // Message précis pour diagnostiquer (401, réseau, parse error…)
       console.error('[loadSystemsGeoJSON]', err);
       setStatus(`Erreur GeoJSON : ${err.message}`);
-      // Ne pas appeler setTifLoaded(true) — le bouton Thermique reste désactivé
     }
   }
 
@@ -312,8 +318,6 @@ export default function MapPage() {
       const east = parseFloat(res.headers.get('X-Bounds-East'));
       const north = parseFloat(res.headers.get('X-Bounds-North'));
 
-      // Les bounds sont en UTM zone 29N (EPSG:32629) → convertir en WGS84 pour Leaflet
-      // On détecte automatiquement : si les valeurs dépassent 90/180 c'est de l'UTM
       const isUTM = Math.abs(west) > 180 || Math.abs(south) > 90;
       let swLat, swLng, neLat, neLng;
       if (isUTM) {
@@ -352,7 +356,6 @@ export default function MapPage() {
         };
         [swLat, swLng] = utmToWgs84(west, south);
         [neLat, neLng] = utmToWgs84(east, north);
-        console.log('[thermal] UTM→WGS84:', { swLat, swLng, neLat, neLng });
       } else {
         swLat = south; swLng = west;
         neLat = north; neLng = east;
@@ -361,10 +364,7 @@ export default function MapPage() {
       const blob = await res.blob();
       const layer = L.imageOverlay(
         URL.createObjectURL(blob),
-        [
-          [swLat, swLng],
-          [neLat, neLng],
-        ],
+        [[swLat, swLng], [neLat, neLng]],
         { opacity: 0.75 }
       );
       layer.addTo(map);
@@ -387,15 +387,12 @@ export default function MapPage() {
         <span style={styles.status}>
           {loading ? (
             <>
-              <i className="fa-solid fa-spinner fa-spin" style={{ marginRight: 6 }} />
+              <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: 6 }} />
               {status}
             </>
           ) : (
             <>
-              <i
-                className="fa-solid fa-circle-info"
-                style={{ marginRight: 6, color: '#f0c040' }}
-              />
+              <FontAwesomeIcon icon={faCircleInfo} style={{ marginRight: 6, color: '#f0c040' }} />
               {status}
             </>
           )}
@@ -410,7 +407,7 @@ export default function MapPage() {
             cursor: !tifLoaded ? 'not-allowed' : 'pointer',
           }}
         >
-          <i className="fa-solid fa-temperature-half" style={{ marginRight: 6 }} />
+          <FontAwesomeIcon icon={faTemperatureHalf} style={{ marginRight: 6 }} />
           Thermique {thermalVisible ? 'ON' : 'OFF'}
         </button>
       </div>
@@ -421,10 +418,7 @@ export default function MapPage() {
         {thermalVisible && (
           <div style={styles.legend}>
             <p style={styles.legendTitle}>
-              <i
-                className="fa-solid fa-temperature-half"
-                style={{ marginRight: 6, color: '#e74c3c' }}
-              />
+              <FontAwesomeIcon icon={faTemperatureHalf} style={{ marginRight: 6, color: '#e74c3c' }} />
               Température simulée
             </p>
             <div style={styles.gradient} />
