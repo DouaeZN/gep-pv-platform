@@ -40,7 +40,7 @@ export default function MapPage() {
     const map = L.map(mapRef.current, {
       center: GEP_CENTER,
       zoom: GEP_ZOOM,
-      minZoom: 10,
+      minZoom: 17,
       maxZoom: 24,
       zoomSnap: 0.5,
       zoomDelta: 0.5,
