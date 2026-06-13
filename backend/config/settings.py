@@ -18,10 +18,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # Libs tierces
     'rest_framework',
     'corsheaders',
-    # Notre app
     'api',
 ]
 
@@ -63,7 +61,7 @@ DATABASES = {
         'NAME': 'gep_db',
         'USER': 'gep_user',
         'PASSWORD': 'gep_pass123',
-        'HOST': 'localhost',    
+        'HOST': 'db',    
         'PORT': '5432',
     }
 }
@@ -95,5 +93,10 @@ USE_TZ = True
 STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Dossier pour les fichiers de données (CSV, GeoTIFF)
 DATA_DIR = BASE_DIR.parent / 'data'
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}

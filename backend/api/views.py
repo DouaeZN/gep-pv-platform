@@ -9,6 +9,8 @@ from .models import PVSystem, Module, Inverter, DCProduction, ACProduction
 import io
 from rio_tiler.io import Reader
 from PIL import Image as PILImage
+from django.core.cache import cache
+
 
 class SystemListView(APIView):
     def get(self, request):
@@ -185,10 +187,26 @@ class OrthomapRGBView(APIView):
 
 
 class OrthomapThermalView(APIView):
+    """Génère la couche thermique simulée en PNG côté serveur."""
+
     def get(self, request):
         tif_path = settings.DATA_DIR / 'masque.tif'
         if not tif_path.exists():
             return Response({'error': 'GeoTIFF non trouvé'}, status=404)
+
+        CACHE_KEY = 'thermal_overlay_v1'
+        cached = cache.get(CACHE_KEY)
+        if cached:
+            response = HttpResponse(cached['png'], content_type='image/png')
+            response['X-Bounds-West']  = cached['west']
+            response['X-Bounds-South'] = cached['south']
+            response['X-Bounds-East']  = cached['east']
+            response['X-Bounds-North'] = cached['north']
+            response['Access-Control-Expose-Headers'] = (
+                'X-Bounds-West, X-Bounds-South, X-Bounds-East, X-Bounds-North'
+            )
+            return response
+
         try:
             import rasterio
             from rasterio.enums import Resampling
@@ -206,7 +224,6 @@ class OrthomapThermalView(APIView):
                 b = src.read(3, out_shape=(new_height, new_width),
                              resampling=Resampling.bilinear).astype(float)
 
-                # Convertir en WGS84
                 west, south, east, north = get_wgs84_bounds(src)
 
             thermal = 0.3 * r + 0.59 * g + 0.11 * b
@@ -234,10 +251,17 @@ class OrthomapThermalView(APIView):
             img = PILImage.fromarray(rgba, 'RGBA')
             buf = io.BytesIO()
             img.save(buf, format='PNG', optimize=True)
-            buf.seek(0)
+            png_bytes = buf.getvalue()
 
-            from django.http import HttpResponse
-            response = HttpResponse(buf.read(), content_type='image/png')
+            cache.set(CACHE_KEY, {
+                'png':   png_bytes,
+                'west':  str(west),
+                'south': str(south),
+                'east':  str(east),
+                'north': str(north),
+            }, timeout=3600)
+
+            response = HttpResponse(png_bytes, content_type='image/png')
             response['X-Bounds-West']  = str(west)
             response['X-Bounds-South'] = str(south)
             response['X-Bounds-East']  = str(east)
@@ -249,81 +273,12 @@ class OrthomapThermalView(APIView):
 
         except Exception as e:
             return Response({'error': str(e)}, status=500)
-    """Génère la couche thermique simulée en PNG côté serveur."""
-
-    def get(self, request):
-        tif_path = settings.DATA_DIR / 'masque.tif'
-        if not tif_path.exists():
-            return Response({'error': 'GeoTIFF non trouvé'}, status=404)
-
-        try:
-            import rasterio
-            from rasterio.enums import Resampling
-            import numpy as np
-
-            with rasterio.open(tif_path) as src:
-                scale = min(1.0, 1000 / src.width)
-                new_width = int(src.width * scale)
-                new_height = int(src.height * scale)
-
-                r = src.read(1, out_shape=(new_height, new_width),
-                             resampling=Resampling.bilinear).astype(float)
-                g = src.read(2, out_shape=(new_height, new_width),
-                             resampling=Resampling.bilinear).astype(float)
-                b = src.read(3, out_shape=(new_height, new_width),
-                             resampling=Resampling.bilinear).astype(float)
-
-                bounds = src.bounds
-
-            # Calculer valeur thermique simulée
-            thermal = 0.3 * r + 0.59 * g + 0.11 * b
-            t = 1 - (thermal - thermal.min()) / (thermal.max() - thermal.min() + 1)
-
-            # Palette Inferno
-            INFERNO = np.array([
-                [0,   0,   4],
-                [40,  11,  84],
-                [101, 21,  110],
-                [159, 42,  99],
-                [212, 72,  66],
-                [245, 125, 21],
-                [250, 193, 39],
-                [252, 255, 164],
-            ], dtype=float)
-
-            idx = t * (len(INFERNO) - 1)
-            lo = np.floor(idx).astype(int).clip(0, len(INFERNO) - 2)
-            hi = (lo + 1).clip(0, len(INFERNO) - 1)
-            frac = (idx - lo)[..., np.newaxis]
-
-            rgb = (INFERNO[lo] * (1 - frac) + INFERNO[hi] * frac).astype('uint8')
-            alpha = np.full((*rgb.shape[:2], 1), 180, dtype='uint8')
-            rgba = np.concatenate([rgb, alpha], axis=-1)
-
-            img = PILImage.fromarray(rgba, 'RGBA')
-            buf = io.BytesIO()
-            img.save(buf, format='PNG', optimize=True)
-            buf.seek(0)
-
-            from django.http import HttpResponse
-            response = HttpResponse(buf.read(), content_type='image/png')
-            response['X-Bounds-West'] = str(bounds.left)
-            response['X-Bounds-South'] = str(bounds.bottom)
-            response['X-Bounds-East'] = str(bounds.right)
-            response['X-Bounds-North'] = str(bounds.top)
-            response['Access-Control-Expose-Headers'] = (
-                'X-Bounds-West, X-Bounds-South, X-Bounds-East, X-Bounds-North'
-            )
-            return response
-
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
         
 class TileView(APIView):
-    """Sert les tuiles XYZ depuis le COG — bonne résolution à chaque zoom."""
+    """Sert les tuiles XYZ depuis le COG"""
 
     def get(self, request, z, x, y):
-        tif_path = str(settings.DATA_DIR / 'masque.tif')
+        tif_path = str(settings.DATA_DIR / 'masque_cog.tif')
         try:
             with Reader(tif_path) as cog:
                 img = cog.tile(x, y, z, indexes=[1, 2, 3])
