@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSun, faRightToBracket, faSpinner } from '@fortawesome/free-solid-svg-icons';
 
 export default function Login() {
   const { login } = useAuth();
@@ -22,57 +24,61 @@ export default function Login() {
   };
 
   return (
-    <>
-      <link
-        rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
-      />
-      <div style={styles.page}>
-        <div style={styles.card}>
-          <div style={styles.logo}>
-            <i className="fa-solid fa-sun" style={styles.sunIcon}></i>
-          </div>
-          <h1 style={styles.title}>GEP Monitor</h1>
-          <p style={styles.subtitle}>Green Energy Park — Benguerir</p>
-
-          <form onSubmit={handleSubmit} style={styles.form}>
-            <div style={styles.field}>
-              <label style={styles.label}>Email</label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin@gep.ma"
-                style={styles.input}
-                required
-              />
-            </div>
-
-            <div style={styles.field}>
-              <label style={styles.label}>Mot de passe</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                style={styles.input}
-                required
-              />
-            </div>
-
-            {error && <p style={styles.error}>{error}</p>}
-
-            <button
-              type="submit"
-              style={styles.button}
-              disabled={loading}
-            >
-              {loading ? 'Connexion...' : 'Se connecter'}
-            </button>
-          </form>
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <div style={styles.logo}>
+          <FontAwesomeIcon icon={faSun} style={styles.sunIcon} />
         </div>
+        <h1 style={styles.title}>GEP Monitor</h1>
+        <p style={styles.subtitle}>Green Energy Park — Benguerir</p>
+
+        <form onSubmit={handleSubmit} style={styles.form}>
+          <div style={styles.field}>
+            <label style={styles.label}>Email</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="admin@gep.ma"
+              style={styles.input}
+              required
+            />
+          </div>
+
+          <div style={styles.field}>
+            <label style={styles.label}>Mot de passe</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              style={styles.input}
+              required
+            />
+          </div>
+
+          {error && <p style={styles.error}>{error}</p>}
+
+          <button
+            type="submit"
+            style={styles.button}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <FontAwesomeIcon icon={faSpinner} spin style={{ marginRight: '8px' }} />
+                Connexion...
+              </>
+            ) : (
+              <>
+                <FontAwesomeIcon icon={faRightToBracket} style={{ marginRight: '8px' }} />
+                Se connecter
+              </>
+            )}
+          </button>
+        </form>
       </div>
-    </>
+    </div>
   );
 }
 

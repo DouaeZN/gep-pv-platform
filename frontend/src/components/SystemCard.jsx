@@ -1,26 +1,33 @@
 import { useNavigate } from 'react-router-dom';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faBolt,
+  faSquare,
+  faPlug,
+  faArrowRight
+} from '@fortawesome/free-solid-svg-icons';
 
 export default function SystemCard({ system }) {
   const navigate = useNavigate();
 
   return (
     <div style={styles.card}>
-      {/* Image représentative */}
       <img
         src="https://images.unsplash.com/photo-1509391366360-2e959784a276?w=400&h=200&fit=crop"
         alt="Système PV"
         style={styles.image}
       />
 
-      {/* Header */}
       <div style={styles.header}>
         <h2 style={styles.title}>{system.name}</h2>
         <span style={styles.badge}>{system.system_id}</span>
       </div>
 
-      {/* Infos système */}
       <div style={styles.section}>
-        <h3 style={styles.sectionTitle}>⚡ Système</h3>
+        <h3 style={styles.sectionTitle}>
+          <FontAwesomeIcon icon={faBolt} style={{ marginRight: '8px', color: '#f0c040' }} />
+          Système
+        </h3>
         <div style={styles.grid}>
           <InfoRow label="Capacité" value={`${system.capacity_kwc} kWc`} />
           <InfoRow label="Mise en service" value={system.commissioning_date} />
@@ -30,10 +37,12 @@ export default function SystemCard({ system }) {
         </div>
       </div>
 
-      {/* Infos module */}
       {system.module && (
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>🔲 Panneaux</h3>
+          <h3 style={styles.sectionTitle}>
+            <FontAwesomeIcon icon={faSquare} style={{ marginRight: '8px', color: '#1a1a2e' }} />
+            Panneaux
+          </h3>
           <div style={styles.grid}>
             <InfoRow label="Marque" value={system.module.brand} />
             <InfoRow label="Modèle" value={system.module.model} />
@@ -44,10 +53,12 @@ export default function SystemCard({ system }) {
         </div>
       )}
 
-      {/* Infos onduleurs */}
       {system.inverters && system.inverters.length > 0 && (
         <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>🔌 Onduleurs</h3>
+          <h3 style={styles.sectionTitle}>
+            <FontAwesomeIcon icon={faPlug} style={{ marginRight: '8px', color: '#e74c3c' }} />
+            Onduleurs
+          </h3>
           {system.inverters.map((inv) => (
             <div key={inv.inverter_id} style={styles.inverterRow}>
               <InfoRow label="Modèle" value={`${inv.brand} ${inv.model}`} />
@@ -59,7 +70,6 @@ export default function SystemCard({ system }) {
         </div>
       )}
 
-      {/* Live data */}
       <div style={styles.liveBox}>
         <div style={styles.liveItem}>
           <span style={styles.liveLabel}>Puissance AC actuelle</span>
@@ -75,12 +85,12 @@ export default function SystemCard({ system }) {
         </div>
       </div>
 
-      {/* Bouton détail */}
       <button
         style={styles.button}
         onClick={() => navigate(`/system/${system.system_id}`)}
       >
-        Voir les détails →
+        Voir les détails
+        <FontAwesomeIcon icon={faArrowRight} style={{ marginLeft: '8px' }} />
       </button>
     </div>
   );

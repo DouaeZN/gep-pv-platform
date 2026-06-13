@@ -17,7 +17,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const isLoginEndpoint = error.config?.url?.includes('/token/');
+    
+    if (error.response?.status === 401 && !isLoginEndpoint) {
       localStorage.removeItem('access_token');
       window.location.href = '/login';
     }

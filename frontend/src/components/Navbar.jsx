@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faSun } from '@fortawesome/free-solid-svg-icons';
 
 export default function Navbar() {
   const { logout } = useAuth();
@@ -7,7 +9,8 @@ export default function Navbar() {
   return (
     <nav style={styles.nav}>
       <div style={styles.brand}>
-        ☀️ GEP Monitor
+        <FontAwesomeIcon icon={faSun} style={{ marginRight: '8px' }} />
+        GEP Monitor
       </div>
       <div style={styles.links}>
         <Link to="/dashboard" style={styles.link}>Dashboard</Link>

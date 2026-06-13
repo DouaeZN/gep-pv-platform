@@ -55,8 +55,8 @@ export default function MapPage() {
       { attribution: '© OpenStreetMap', maxZoom: 24, maxNativeZoom: 19 }
     );
     const satellite = L.tileLayer(
-      'https://mt0.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-      { attribution: '© Google', maxZoom: 24, maxNativeZoom: 21 }
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { attribution: '© Esri World Imagery', maxZoom: 24, maxNativeZoom: 17 }
     );
     const terrain = L.tileLayer(
       'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
